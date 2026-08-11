@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entrar &middot; Painel Comercial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/estilo.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <main class="entrada">
+    <div class="entrada-caixa">
+      <div class="cartao">
+        <div class="espectro"></div>
+        <div class="cartao-corpo">
+          <h1>Painel comercial</h1>
+          <p class="sub">Curva ABC, mix de produtos e oportunidades de venda.</p>
+
+          <div class="campo">
+            <label for="email">E-mail</label>
+            <input id="email" type="email" autocomplete="username" autofocus />
+          </div>
+          <div class="campo">
+            <label for="senha">Senha</label>
+            <input id="senha" type="password" autocomplete="current-password" />
+          </div>
+
+          <button class="botao botao-principal" id="entrar">Entrar</button>
+          <p class="entrada-erro" id="erro" role="alert"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+</body>
+</html>

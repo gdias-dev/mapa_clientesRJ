@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel Comercial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/estilo.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <div class="carregando" id="carregando"></div>
+  <div class="espectro"></div>
+
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">
+        <strong>Painel comercial</strong>
+        <span>Curva ABC &middot; mix &middot; oportunidades</span>
+      </div>
+      <div class="campo" style="min-width:220px">
+        <label for="seletor-periodo">Periodo</label>
+        <select id="seletor-periodo"></select>
+      </div>
+      <div class="topo-acoes">
+        <span class="usuario" id="usuario"></span>
+        <button class="botao" id="exportar-clientes">Exportar clientes</button>
+        <button class="botao botao-principal" id="abrir-importar">Importar relatorio</button>
+        <button class="botao botao-discreto" id="sair">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="filtros" aria-label="Filtros">
+    <div class="filtros-conteudo">
+      <div class="filtros-linha">
+        <div class="campo campo-largo">
+          <label for="f-busca">Buscar cliente</label>
+          <input id="f-busca" type="search" data-filtro="busca" placeholder="Nome ou codigo" />
+        </div>
+        <div class="campo campo-largo">
+          <label for="f-familia">Familia do produto</label>
+          <select id="f-familia" data-filtro="familia"></select>
+        </div>
+        <div class="campo campo-largo">
+          <label for="f-compra">So clientes que compram</label>
+          <select id="f-compra" data-filtro="compraFamilia"></select>
+        </div>
+        <button class="botao" id="mais-filtros" type="button">Mais filtros</button>
+        <button class="botao botao-discreto" id="limpar-filtros" type="button">Limpar</button>
+      </div>
+
+      <div class="filtros-extras" id="filtros-extras">
+        <div class="filtros-linha">
+          <div class="campo">
+            <label for="f-valor-min">Faturamento minimo</label>
+            <input id="f-valor-min" type="number" min="0" step="100" data-filtro="valorMin" placeholder="R$" />
+          </div>
+          <div class="campo">
+            <label for="f-valor-max">Faturamento maximo</label>
+            <input id="f-valor-max" type="number" min="0" step="100" data-filtro="valorMax" placeholder="R$" />
+          </div>
+          <div class="campo">
+            <label for="f-qtd-min">Unidades minimas</label>
+            <input id="f-qtd-min" type="number" min="0" step="1" data-filtro="qtdMin" />
+          </div>
+          <div class="campo">
+            <label for="f-qtd-max">Unidades maximas</label>
+            <input id="f-qtd-max" type="number" min="0" step="1" data-filtro="qtdMax" />
+          </div>
+        </div>
+      </div>
+
+      <div class="atalhos">
+        <button class="atalho" type="button" data-classe="A">Só classe A</button>
+        <button class="atalho" type="button" data-classe="B">Só classe B</button>
+        <button class="atalho" type="button" data-classe="C">Só classe C</button>
+      </div>
+
+      <div class="marcadores" id="marcadores"></div>
+    </div>
+  </section>
+
+  <main class="conteudo">
+    <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+
+    <div class="grade">
+      <section class="cartao">
+        <div class="cartao-cabeca">
+          <div>
+            <h2>Concentracao de faturamento</h2>
+            <p>Cada barra e um cliente, do maior para o menor. A linha e o acumulado.</p>
+          </div>
+        </div>
+        <div class="cartao-corpo">
+          <div class="grafico-caixa alto"><canvas id="grafico-pareto"></canvas></div>
+        </div>
+      </section>
+
+      <div class="coluna">
+        <section class="cartao">
+          <div class="cartao-cabeca"><h2>Curva ABC</h2></div>
+          <div class="cartao-corpo">
+            <div class="abc-barra" id="abc-barra"></div>
+            <div class="abc-legenda" id="abc-legenda"></div>
+            <h3 style="font-size:12px;margin:20px 0 8px;color:var(--tinta-3)">Participacao acumulada</h3>
+            <div class="concentracao" id="concentracao"></div>
+          </div>
+        </section>
+
+        <section class="cartao">
+          <div class="cartao-cabeca"><h2>Faturamento por familia</h2></div>
+          <div class="cartao-corpo">
+            <div class="grafico-caixa"><canvas id="grafico-familias"></canvas></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="grade-dois">
+      <section class="cartao">
+        <div class="cartao-cabeca">
+          <div>
+            <h2>Oportunidades</h2>
+            <p>Clientes que compram lente e nunca compraram outra familia.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="oportunidade-familia" class="botao botao-pequeno">
+              <option value="Tratamento">Tratamento</option>
+              <option value="Montagem">Montagem</option>
+              <option value="Coloracao">Coloracao</option>
+              <option value="Lente multifocal">Lente multifocal</option>
+            </select>
+            <button class="botao botao-pequeno" id="exportar-oportunidades">Exportar</button>
+          </div>
+        </div>
+        <div class="cartao-corpo">
+          <p id="oportunidade-resumo" style="font-size:13.5px;color:var(--tinta-2);margin:0 0 12px"></p>
+          <div class="tabela-rolagem" id="lista-oportunidades" style="max-height:360px;overflow:auto"></div>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-cabeca"><h2>Produtos que mais faturam</h2></div>
+        <div class="cartao-corpo tabela-rolagem" id="top-produtos" style="max-height:400px;overflow:auto"></div>
+      </section>
+    </div>
+
+    <section class="cartao" style="margin-top:18px">
+      <div class="cartao-cabeca">
+        <div>
+          <h2>Clientes</h2>
+          <p>Clique na linha para abrir a ficha. Clique no titulo da coluna para reordenar.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="kpi-nota" id="paginacao-texto"></span>
+          <button class="botao botao-pequeno" id="pagina-anterior">Anterior</button>
+          <button class="botao botao-pequeno" id="pagina-proxima">Proxima</button>
+        </div>
+      </div>
+      <div class="cartao-corpo tabela-rolagem">
+        <table class="tabela" id="tabela-clientes">
+          <thead>
+            <tr>
+              <th class="ordenavel" data-coluna="posicao">#</th>
+              <th>Classe</th>
+              <th class="ordenavel" data-coluna="nome">Cliente</th>
+              <th>Municipio</th>
+              <th class="num ordenavel" data-coluna="produtos">Produtos</th>
+              <th class="num ordenavel" data-coluna="quantidade">Unidades</th>
+              <th class="num ordenavel" data-coluna="faturamento">Faturamento</th>
+            </tr>
+          </thead>
+          <tbody id="corpo-clientes"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cartao" style="margin-top:18px">
+      <div class="cartao-cabeca">
+        <div>
+          <h2>Comparacao entre periodos</h2>
+          <p>Cada relatorio importado vira uma barra. Importe um por ano para ver a evolucao.</p>
+        </div>
+      </div>
+      <div class="cartao-corpo">
+        <div class="grafico-caixa"><canvas id="grafico-periodos"></canvas></div>
+        <p id="rodape-periodo" style="font-size:12.5px;color:var(--tinta-3);margin:14px 0 0"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Ficha do cliente -->
+  <div class="modal" id="modal-cliente" role="dialog" aria-modal="true">
+    <div class="modal-caixa">
+      <div class="espectro"></div>
+      <div class="modal-cabeca">
+        <h2 id="ficha-titulo"></h2>
+        <p id="ficha-subtitulo" style="color:var(--tinta-3);font-size:13px;margin:6px 0 0"></p>
+      </div>
+      <div class="modal-corpo" id="ficha-corpo"></div>
+      <div class="modal-rodape">
+        <button class="botao" id="fechar-ficha">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Importacao -->
+  <div class="modal" id="modal-importar" role="dialog" aria-modal="true">
+    <div class="modal-caixa">
+      <div class="espectro"></div>
+      <div class="modal-cabeca">
+        <h2>Importar relatorio</h2>
+        <p style="color:var(--tinta-3);font-size:13.5px;margin:6px 0 0">
+          O periodo e lido do cabecalho do proprio PDF. Reimportar o mesmo periodo
+          substitui os dados anteriores, sem duplicar.
+        </p>
+      </div>
+      <div class="modal-corpo">
+        <div class="area-arquivo" id="area-arquivo" tabindex="0" role="button"></div>
+        <input type="file" id="campo-arquivo" accept=".pdf" hidden />
+        <div id="resultado-importacao"></div>
+
+        <h3 style="font-size:13px;margin:22px 0 8px">Periodos importados</h3>
+        <div id="historico-importacoes" class="tabela-rolagem"></div>
+      </div>
+      <div class="modal-rodape">
+        <button class="botao" id="fechar-importar">Fechar</button>
+        <button class="botao" id="conferir" disabled>Conferir sem gravar</button>
+        <button class="botao botao-principal" id="gravar" disabled>Gravar no painel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/filtros.js"></script>
+  <script src="/js/graficos.js"></script>
+  <script src="/js/importar.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
