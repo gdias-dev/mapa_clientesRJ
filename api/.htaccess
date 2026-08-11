@@ -1,0 +1,17 @@
+# Todas as chamadas de /painel/api/... entram pelo index.php.
+RewriteEngine On
+
+# O cabeçalho Authorization não chega ao PHP em CGI/FastCGI sem esta linha.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Nunca servir configuração, SQL ou instalador como arquivo estático.
+<FilesMatch "\.(sql|log)$">
+  Require all denied
+</FilesMatch>
+<Files "config.local.php">
+  Require all denied
+</Files>
