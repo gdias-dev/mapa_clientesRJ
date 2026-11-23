@@ -71,11 +71,43 @@ function indices_import(): array
         $porNome[chave_nome($c['nome'])] = $c;
     }
     $colaboradores = [];
-    foreach (consulta('SELECT id, nome FROM colaboradores') as $c) $colaboradores[chave_nome($c['nome'])] = (int) $c['id'];
+    foreach (consulta('SELECT id, nome, email FROM colaboradores') as $c) {
+        $colaboradores[] = ['id' => (int) $c['id'], 'nome' => $c['nome'],
+                            'chave' => chave_nome($c['nome']), 'email' => chave_nome($c['email'] ?? '')];
+    }
     $produtos = [];
     foreach (consulta('SELECT id, nome FROM produtos') as $p) $produtos[chave_nome($p['nome'])] = (int) $p['id'];
 
     return compact('porCnpj', 'porNome', 'colaboradores', 'produtos');
+}
+
+/**
+ * Acha o colaborador pelo que veio na planilha: nome completo, e-mail ou
+ * nome abreviado ("Ana" ou "Ana Beatriz" → "Ana Beatriz Lopes"), desde que
+ * só um colaborador combine. Devolve null quando não acha ou fica ambíguo.
+ */
+function achar_colaborador(string $texto, array $colaboradores): ?array
+{
+    $k = chave_nome($texto);
+    if ($k === '') return null;
+    foreach ($colaboradores as $c) if ($c['chave'] === $k || ($c['email'] !== '' && $c['email'] === $k)) return $c;
+
+    $candidatos = array_values(array_filter($colaboradores, fn($c) =>
+        str_starts_with($c['chave'] . ' ', $k . ' ') || str_starts_with($k . ' ', $c['chave'] . ' ')));
+    return count($candidatos) === 1 ? $candidatos[0] : null;
+}
+
+/**
+ * Resolve o colaborador de uma linha. Se não existir, a linha leva o nome em
+ * "colaborador_novo" e ele é cadastrado automaticamente na confirmação.
+ */
+function resolver_colaborador_linha(string $nome, array $idx, array &$alertas): array
+{
+    if ($nome === '') return ['colaborador_id' => null, 'colaborador_novo' => null, 'colaborador_nome' => null];
+    $c = achar_colaborador($nome, $idx['colaboradores']);
+    if ($c) return ['colaborador_id' => $c['id'], 'colaborador_novo' => null, 'colaborador_nome' => $c['nome']];
+    $alertas[] = "Colaborador \"$nome\" ainda não existe — será cadastrado automaticamente.";
+    return ['colaborador_id' => null, 'colaborador_novo' => $nome, 'colaborador_nome' => "$nome (novo)"];
 }
 
 function rota_importacao(string $metodo, array $seg): void
@@ -126,9 +158,8 @@ function rota_importacao(string $metodo, array $seg): void
                 if ($cnpj !== '' && isset($vistos[$cnpj])) $erros[] = 'CNPJ repetido dentro da própria planilha.';
                 if ($cnpj !== '') $vistos[$cnpj] = true;
 
-                $colabNome = texto($valor('colaborador'));
-                $colabId = $colabNome !== '' ? ($idx['colaboradores'][chave_nome($colabNome)] ?? null) : null;
-                if ($colabNome !== '' && !$colabId) $alertas[] = "Colaborador \"$colabNome\" não cadastrado — ficará sem responsável.";
+                $colab = resolver_colaborador_linha(texto($valor('colaborador')), $idx, $alertas);
+                if (!isset($mapa['colaborador'])) $alertas[] = 'Planilha sem coluna "Colaborador" — cliente ficará sem responsável.';
 
                 $lat = moeda($valor('latitude'));
                 $lng = moeda($valor('longitude'));
@@ -153,7 +184,9 @@ function rota_importacao(string $metodo, array $seg): void
                         'latitude' => $lat,
                         'longitude' => $lng,
                         'status' => normalizar_status_import($valor('status')) ?? 'prospeccao',
-                        'colaborador_id' => $colabId,
+                        'colaborador_id' => $colab['colaborador_id'],
+                        'colaborador_novo' => $colab['colaborador_novo'],
+                        'colaborador_nome' => $colab['colaborador_nome'],
                         'observacoes' => texto($valor('observacoes')) ?: null,
                     ],
                 ];
@@ -176,9 +209,7 @@ function rota_importacao(string $metodo, array $seg): void
                 if ($unitario === null) $erros[] = 'Valor não reconhecido.';
                 if (!$dataCompra) $erros[] = 'Data ausente ou em formato não reconhecido.';
 
-                $colabNome = texto($valor('colaborador'));
-                $colabId = $colabNome !== '' ? ($idx['colaboradores'][chave_nome($colabNome)] ?? null) : null;
-                if ($colabNome !== '' && !$colabId) $alertas[] = "Colaborador \"$colabNome\" não cadastrado.";
+                $colab = resolver_colaborador_linha(texto($valor('colaborador')), $idx, $alertas);
 
                 $produtoId = $idx['produtos'][chave_nome($descricao)] ?? null;
                 if (!$produtoId && $descricao !== '') $alertas[] = 'Item fora do catálogo — será gravado como avulso.';
@@ -197,7 +228,9 @@ function rota_importacao(string $metodo, array $seg): void
                         'valor_unitario' => $unitario === null ? null : round($unitario, 2),
                         'data_compra' => $dataCompra,
                         'forma_pagamento' => normalizar_pagamento($valor('forma_pagamento')),
-                        'colaborador_id' => $colabId,
+                        'colaborador_id' => $colab['colaborador_id'],
+                        'colaborador_novo' => $colab['colaborador_novo'],
+                        'colaborador_nome' => $colab['colaborador_nome'],
                         'observacao' => texto($valor('observacao')) ?: null,
                     ],
                 ];
@@ -228,11 +261,30 @@ function rota_importacao(string $metodo, array $seg): void
         if (!$validos) throw new ErroApp(400, 'Todas as linhas têm erro. Corrija a planilha e envie de novo.');
 
         $pdo = db();
-        $criados = $atualizados = 0;
+        $criados = $atualizados = $colaboradoresCriados = 0;
         $pdo->beginTransaction();
         try {
+            // Cadastra uma única vez cada colaborador novo citado na planilha
+            // (rechecando a base, caso alguém o tenha criado depois da prévia).
+            $colabs = indices_import()['colaboradores'];
+            $novos = [];
+            foreach ($validos as $r) {
+                $nome = texto($r['dados']['colaborador_novo'] ?? '');
+                if ($nome === '' || isset($novos[chave_nome($nome)])) continue;
+                $existente = achar_colaborador($nome, $colabs);
+                if ($existente) { $novos[chave_nome($nome)] = $existente['id']; continue; }
+                executa('INSERT INTO colaboradores (nome, setor) VALUES (?, ?)', [mb_substr($nome, 0, 120), 'Comercial']);
+                $id = (int) $pdo->lastInsertId();
+                $novos[chave_nome($nome)] = $id;
+                $colabs[] = ['id' => $id, 'nome' => $nome, 'chave' => chave_nome($nome), 'email' => ''];
+                $colaboradoresCriados++;
+            }
+
             foreach ($validos as $r) {
                 $d = $r['dados'];
+                $novo = texto($d['colaborador_novo'] ?? '');
+                if ($novo !== '') $d['colaborador_id'] = $novos[chave_nome($novo)] ?? null;
+                $d['colaborador_id'] = isset($d['colaborador_id']) && $d['colaborador_id'] !== null ? (int) $d['colaborador_id'] : null;
                 if ($tipo === 'clientes') {
                     if (($r['acao'] ?? '') === 'atualizar' && !empty($r['existente_id'])) {
                         if (!$atualizarExistentes) continue;
@@ -288,6 +340,7 @@ function rota_importacao(string $metodo, array $seg): void
             'ok' => true,
             'criados' => $criados,
             'atualizados' => $atualizados,
+            'colaboradoresCriados' => $colaboradoresCriados,
             'ignorados' => count($registros) - count($validos),
         ]);
     }
@@ -330,6 +383,8 @@ function rota_importacao(string $metodo, array $seg): void
                 : 'Se a planilha trouxer apenas o valor total, o unitário é calculado dividindo pela quantidade.',
             'Datas aceitas: 15/03/2026 ou 2026-03-15. Valores aceitos: 1.234,56 ou 1234.56.',
             'Status válidos: ativo, prospeccao, inativo. Em branco, entra como prospecção.',
+            'Colaborador: escreva o nome do responsável (completo, só o primeiro nome ou o e-mail, se não houver outro igual).',
+            'Colaborador que ainda não existe é cadastrado automaticamente (setor Comercial) — depois complete telefone e e-mail na tela Colaboradores.',
         ]));
 
         $xlsx->enviar("modelo-$tipo.xlsx");
